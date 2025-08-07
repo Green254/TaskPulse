@@ -6,11 +6,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+use App\Models\Projects;
+use App\Models\Tasks;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
+    use HasApiTokens;
 
     /**
      * The attributes that are mass assignable.
@@ -45,4 +49,20 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function roles()
+{
+    return $this->belongsToMany(Role::class, 'role_users');
+}
+
+public function projects()
+{
+    return $this->hasMany(Projects::class, 'created_by');
+}
+
+public function tasks()
+{
+    return $this->hasMany(Tasks::class, 'assigned_to');
+}
+
 }
