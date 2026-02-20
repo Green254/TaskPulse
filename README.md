@@ -1,3 +1,30 @@
+# TaskPulse Backend
+
+## Today's Accomplishments (February 20, 2026)
+
+### Backend (TaskPulse API)
+- Implemented RBAC-driven task workflows for admin, manager, and staff behavior.
+- Added department support and hierarchy mapping (manager to subordinates).
+- Enforced stricter auth validation:
+  - Login requires matching `name + email + password`.
+  - Registration requires unique names and required department selection.
+- Built Admin Master APIs:
+  - User listing/filtering
+  - Create user
+  - Update user hierarchy/role
+  - Suspend/reactivate user
+  - Delete user
+- Added suspension enforcement middleware and blocked suspended users from login and API access.
+- Added organization-wide communication features:
+  - Announcements (scope: all, role, or department)
+  - Weekly system themes
+- Added and updated feature tests for auth, hierarchy, tasks, and admin controls.
+
+### Validation
+- Backend feature tests passing.
+
+---
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">
