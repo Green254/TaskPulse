@@ -25,14 +25,11 @@ class RoleController extends Controller
     // Assign a role to user
    public function assignRole(User $user, Request $request)
 {
-    $roleId = $request->input('role_id');
+    $request->validate([
+        'role_id' => 'required|exists:roles,id',
+    ]);
 
-    // Just in case, validate the role_id
-    if (! $roleId) {
-        return response()->json(['error' => 'role_id is required'], 422);
-    }
-
-    $user->roles()->syncWithoutDetaching([$roleId]);
+    $user->roles()->syncWithoutDetaching([$request->role_id]);
 
     return response()->json(['message' => 'Role assigned successfully']);
 }

@@ -20,8 +20,13 @@ class Tasks extends Model
         'title',
         'description',
         'project_id',
+        'user_id',
         'assigned_to',
         'status',
+        'due_date',
+        'created_by',
+        'updated_by',
+        'deleted_by',
     ];
 
     public function project()

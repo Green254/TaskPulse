@@ -2,88 +2,135 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Department;
+use App\Models\Role;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
-use App\Models\User;
-use App\Models\Role;
 
 class AuthController extends Controller
 {
     public function register(Request $request)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+        $validated = $request->validate([
+            'name' => 'required|string|max:255|unique:users,name',
+            'email' => 'required|string|email|max:255|unique:users,email',
+            'department_id' => 'required|integer|exists:departments,id',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
+        $department = Department::query()->findOrFail($validated['department_id']);
+
+        $user = User::query()->create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'department_id' => $department->id,
+            'password' => $validated['password'],
         ]);
 
-        // Assign default role to user
-        $user->roles()->attach(Role::where('name', 'user')->first());
+        $this->assignRegistrationRoles($user, $department);
 
-        // Generate token
         $token = $user->createToken('main')->plainTextToken;
 
         return response()->json([
             'message' => 'User registered successfully',
-            'token' => $token
+            'token' => $token,
+            'user' => $user->fresh()->load(['roles', 'department']),
         ], 201);
     }
 
     public function login(Request $request)
-       {
-        // 1. Validate the incoming request
+    {
         $credentials = $request->validate([
+            'name' => ['required', 'string'],
             'email' => ['required', 'email'],
             'password' => ['required'],
         ]);
 
-        // 2. Attempt login
-        if (!Auth::attempt($credentials)) {
+        $user = User::query()
+            ->where('name', $credentials['name'])
+            ->where('email', $credentials['email'])
+            ->first();
+
+        if (!$user || !Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
+                'name' => ['The provided credentials are incorrect.'],
                 'email' => ['The provided credentials are incorrect.'],
             ]);
         }
 
-          // 4. Get the user
-        $user = $request->user()->load('roles');
+        if ($user->isCurrentlySuspended()) {
+            return response()->json([
+                'message' => $this->buildSuspensionMessage($user),
+                'suspended_until' => $user->suspended_until?->toIso8601String(),
+            ], 423);
+        }
 
-        // 5. Create a token for the user
+        if ($user->is_suspended && $user->suspended_until && $user->suspended_until->isPast()) {
+            $user->forceFill([
+                'is_suspended' => false,
+                'suspended_until' => null,
+                'suspension_reason' => null,
+            ])->save();
+        }
+
+        $user->load(['roles', 'department']);
         $token = $user->createToken('main')->plainTextToken;
 
-        // 6. Return the authenticated user
-    return response()->json([
-        'message' => 'Login successful',
-        'token' => $token,
-        'user' => $user
-    ])->header('Authorization', 'Bearer ' . $token);
+        return response()->json([
+            'message' => 'Login successful',
+            'token' => $token,
+            'user' => $user,
+        ])->header('Authorization', 'Bearer ' . $token);
     }
 
- // Logout method
-public function logout(Request $request)
-{
-    // 1. Revoke the current user's token and delete it from the database 
-    /** @var PersonalAccessToken $token */
-    $token = $request->user()->currentAccessToken();
-
-    $token?->delete();
-
-    return response()->json([
-        'message' => 'Logged out successfully'
-    ]);
-}
-
-// Get authenticated user details
-        public function me(Request $request)
+    public function logout(Request $request)
     {
-        return response()->json($request->user());
+        /** @var PersonalAccessToken $token */
+        $token = $request->user()->currentAccessToken();
+        $token?->delete();
+
+        return response()->json([
+            'message' => 'Logged out successfully',
+        ]);
+    }
+
+    public function me(Request $request)
+    {
+        return response()->json($request->user()->load(['roles', 'department']));
+    }
+
+    private function assignRegistrationRoles(User $user, Department $department): void
+    {
+        $roleIds = [];
+
+        $baseRole = Role::query()->firstOrCreate(['name' => 'user']);
+        $roleIds[] = $baseRole->id;
+
+        $departmentRoleName = match (strtolower($department->name)) {
+            'management' => 'manager',
+            'security' => 'watchman',
+            'kitchen' => 'chef',
+            'staff' => 'staff',
+            default => 'user',
+        };
+
+        if ($departmentRoleName !== 'user') {
+            $departmentRole = Role::query()->firstOrCreate(['name' => $departmentRoleName]);
+            $roleIds[] = $departmentRole->id;
+        }
+
+        $user->roles()->syncWithoutDetaching($roleIds);
+    }
+
+    private function buildSuspensionMessage(User $user): string
+    {
+        if ($user->suspended_until) {
+            return 'Your account is suspended until ' . $user->suspended_until->toDayDateTimeString() . '.';
+        }
+
+        return 'Your account is suspended. Contact an administrator.';
     }
 }
